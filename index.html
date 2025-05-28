@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epic Run: Mystic Jungle Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #game-canvas {
+            display: block;
+            background: linear-gradient(to bottom, #1a2a6c, #b21f1f, #fdbb2d);
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+        
+        #stage-display {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            color: #FFD700;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+        
+        #health-bar {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            height: 20px;
+            background: rgba(255, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(to right, #FF416C, #FF4B2B);
+            transition: width 0.3s;
+        }
+        
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+        }
+        
+        #start-screen h1, #game-over-screen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #FFD700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+        
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: linear-gradient(to right, #FF416C, #FF4B2B);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            pointer-events: auto;
+            margin: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(255, 75, 43, 0.7);
+        }
+        
+        #powerup-display {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .powerup-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div id="score-display">Score: 0</div>
+            <div id="stage-display">Stage: Enchanted Forest</div>
+            <div id="health-bar">
+                <div id="health-fill"></div>
+            </div>
+            <div id="powerup-display"></div>
+            
+            <div id="start-screen">
+                <h1>EPIC RUN</h1>
+                <p>Escape the mystical jungle and its terrifying creatures!</p>
+                <button id="start-button">START ADVENTURE</button>
+            </div>
+            
+            <div id="game-over-screen" style="display: none;">
+                <h1>GAME OVER</h1>
+                <p id="final-score">You scored: 0</p>
+                <button id="restart-button">TRY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="bg-music" loop>
+        <source src="https://assets.mixkit.co/music/preview/mixkit-epic-adventure-ai-1697.mp3" type="audio/mpeg">
+    </audio>
+    
+    <audio id="jump-sound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-quick-jump-arcade-game-239.mp3" type="audio/mpeg">
+    </audio>
+    
+    <audio id="coin-sound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3" type="audio/mpeg">
+    </audio>
+    
+    <audio id="game-over-sound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-retro-arcade-lose-2027.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        // ===== GAME CONFIGURATION ===== //
+        const config = {
+            playerSpeed: 5,
+            gravity: 0.5,
+            jumpForce: 12,
+            stageLengths: [2000, 3000, 4000, 5000, 6000], // Distance for each stage
+            stageThemes: [
+                { name: "Enchanted Forest", bgColor: "#1a2a6c", obstacleDensity: 3 },
+                { name: "Ancient Ruins", bgColor: "#614385", obstacleDensity: 4 },
+                { name: "Cursed Caves", bgColor: "#16222A", obstacleDensity: 5 },
+                { name: "Volcanic Wasteland", bgColor: "#b21f1f", obstacleDensity: 6 },
+                { name: "Sky Temple", bgColor: "#0575E6", obstacleDensity: 7 }
+            ],
+            powerups: [
+                { type: "shield", duration: 5000, color: "#00B4DB", icon: "🛡️" },
+                { type: "speed", duration: 4000, color: "#FF0084", icon: "⚡" },
+                { type: "doubleJump", duration: 8000, color: "#A8FF78", icon: "🦘" }
+            ]
+        };
+
+        // ===== GAME STATE ===== //
+        let game = {
+            canvas: null,
+            ctx: null,
+            lastTime: 0,
+            score: 0,
+            distance: 0,
+            stage: 0,
+            isRunning: false,
+            isGameOver: false,
+            player: {
+                x: 100,
+                y: 300,
+                width: 50,
+                height: 80,
+                velocityY: 0,
+                isJumping: false,
+                powerups: [],
+                health: 100
+            },
+            obstacles: [],
+            powerups: [],
+            groundHeight: 400,
+            keys: {
+                ArrowUp: false,
+                ArrowDown: false,
+                ArrowLeft: false,
+                ArrowRight: false,
+                Space: false
+            }
+        };
+
+        // ===== INITIALIZE GAME ===== //
+        function init() {
+            game.canvas = document.getElementById('game-canvas');
+            game.ctx = game.canvas.getContext('2d');
+            
+            // Set canvas to full window size
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Event listeners
+            document.getElementById('start-button').addEventListener('click', startGame);
+            document.getElementById('restart-button').addEventListener('click', restartGame);
+            
+            window.addEventListener('keydown', (e) => {
+                if (e.code in game.keys) game.keys[e.code] = true;
+            });
+            
+            window.addEventListener('keyup', (e) => {
+                if (e.code in game.keys) game.keys[e.code] = false;
+            });
+            
+            // Touch controls for mobile
+            game.canvas.addEventListener('touchstart', handleTouch);
+            game.canvas.addEventListener('click', handleTouch);
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resizeCanvas() {
+            game.canvas.width = window.innerWidth;
+            game.canvas.height = window.innerHeight;
+            game.groundHeight = game.canvas.height * 0.7;
+        }
+
+        function handleTouch(e) {
+            if (!game.isRunning) return;
+            
+            // Simple touch controls: tap right side to jump, left side to slide
+            const touchX = e.clientX || e.touches[0].clientX;
+            
+            if (touchX > game.canvas.width / 2) {
+                jump();
+            } else {
+                slide();
+            }
+        }
+
+        // ===== GAME FUNCTIONS ===== //
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'none';
+            
+            resetGame();
+            game.isRunning = true;
+            
+            // Play background music
+            document.getElementById('bg-music').volume = 0.3;
+            document.getElementById('bg-music').play();
+        }
+
+        function restartGame() {
+            document.getElementById('game-over-screen').style.display = 'none';
+            resetGame();
+            game.isRunning = true;
+        }
+
+        function resetGame() {
+            game.score = 0;
+            game.distance = 0;
+            game.stage = 0;
+            game.isGameOver = false;
+            game.obstacles = [];
+            game.powerups = [];
+            
+            game.player = {
+                x: 100,
+                y: game.groundHeight - 80,
+                width: 50,
+                height: 80,
+                velocityY: 0,
+                isJumping: false,
+                powerups: [],
+                health: 100
+            };
+            
+            updateUI();
+        }
+
+        function gameOver() {
+            game.isRunning = false;
+            game.isGameOver = true;
+            
+            document.getElementById('game-over-screen').style.display = 'flex';
+            document.getElementById('final-score').textContent = `You scored: ${game.score}`;
+            
+            document.getElementById('bg-music').pause();
+            document.getElementById('game-over-sound').play();
+        }
+
+        function updateUI() {
+            document.getElementById('score-display').textContent = `Score: ${game.score}`;
+            document.getElementById('stage-display').textContent = `Stage: ${config.stageThemes[game.stage].name}`;
+            document.getElementById('health-fill').style.width = `${game.player.health}%`;
+            
+            // Update powerup display
+            const powerupDisplay = document.getElementById('powerup-display');
+            powerupDisplay.innerHTML = '';
+            
+            game.player.powerups.forEach(powerup => {
+                const icon = document.createElement('div');
+                icon.className = 'powerup-icon';
+                icon.style.background = powerup.color;
+                icon.textContent = powerup.icon;
+                powerupDisplay.appendChild(icon);
+            });
+        }
+
+        // ===== GAME MECHANICS ===== //
+        function jump() {
+            if (!game.player.isJumping || hasPowerup('doubleJump')) {
+                game.player.velocityY = -config.jumpForce;
+                game.player.isJumping = true;
+                document.getElementById('jump-sound').currentTime = 0;
+                document.getElementById('jump-sound').play();
+                
+                if (hasPowerup('doubleJump')) {
+                    // Remove double jump after use
+                    removePowerup('doubleJump');
+                }
+            }
+        }
+
+        function slide() {
+            // Implement sliding mechanic
+            console.log("Sliding!");
+        }
+
+        function spawnObstacle() {
+            const stageConfig = config.stageThemes[game.stage];
+            const types = ['tree', 'rock', 'pit', 'enemy'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            const obstacle = {
+                x: game.canvas.width,
+                width: 30 + Math.random() * 50,
+                height: 40 + Math.random() * 60,
+                type: type,
+                speed: 5 + game.stage * 0.5 // Increase speed with each stage
+            };
+            
+            // Position on ground
+            obstacle.y = game.groundHeight - obstacle.height;
+            
+            game.obstacles.push(obstacle);
+        }
+
+        function spawnPowerup() {
+            if (Math.random() > 0.02) return; // 2% chance per frame
+            
+            const powerupType = config.powerups[Math.floor(Math.random() * config.powerups.length)];
+            
+            const powerup = {
+                x: game.canvas.width,
+                y: game.groundHeight - 100 - Math.random() * 200,
+                width: 30,
+                height: 30,
+                ...powerupType
+            };
+            
+            game.powerups.push(powerup);
+        }
+
+        function collectPowerup(powerup) {
+            game.player.powerups.push({
+                type: powerup.type,
+                color: powerup.color,
+                icon: powerup.icon,
+                endTime: Date.now() + powerup.duration
+            });
+            
+            game.score += 50;
+            document.getElementById('coin-sound').currentTime = 0;
+            document.getElementById('coin-sound').play();
+        }
+
+        function hasPowerup(type) {
+            return game.player.powerups.some(p => p.type === type);
+        }
+
+        function removePowerup(type) {
+            game.player.powerups = game.player.powerups.filter(p => p.type !== type);
+        }
+
+        function checkCollision(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+
+        function updatePowerups() {
+            const now = Date.now();
+            game.player.powerups = game.player.powerups.filter(p => p.endTime > now);
+        }
+
+        function checkStageProgress() {
+            const stageLength = config.stageLengths[game.stage];
+            
+            if (game.distance >= stageLength) {
+                game.stage++;
+                game.distance = 0;
+                
+                if (game.stage >= config.stageThemes.length) {
+                    // Player completed all stages!
+                    game.stage = config.stageThemes.length - 1;
+                }
+                
+                updateUI();
+            }
+        }
+
+        // ===== GAME LOOP ===== //
+        function gameLoop(timestamp) {
+            // Calculate delta time for smooth animation
+            const deltaTime = timestamp - game.lastTime;
+            game.lastTime = timestamp;
+            
+            // Clear canvas
+            game.ctx.clearRect(0, 0, game.canvas.width, game.canvas.height);
+            
+            if (game.isRunning && !game.isGameOver) {
+                // Update game state
+                update(deltaTime);
+            }
+            
+            // Draw everything
+            draw();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update(deltaTime) {
+            // Update player
+            if (game.keys.ArrowUp || game.keys.Space) {
+                jump();
+            }
+            
+            if (game.keys.ArrowDown) {
+                slide();
+            }
+            
+            // Apply gravity
+            game.player.velocityY += config.gravity;
+            game.player.y += game.player.velocityY;
+            
+            // Ground collision
+            if (game.player.y > game.groundHeight - game.player.height) {
+                game.player.y = game.groundHeight - game.player.height;
+                game.player.velocityY = 0;
+                game.player.isJumping = false;
+            }
+            
+            // Spawn obstacles
+            if (Math.random() < config.stageThemes[game.stage].obstacleDensity * 0.01) {
+                spawnObstacle();
+            }
+            
+            // Spawn powerups
+            spawnPowerup();
+            
+            // Update obstacles
+            for (let i = game.obstacles.length - 1; i >= 0; i--) {
+                game.obstacles[i].x -= game.player.speed;
+                
+                // Remove off-screen obstacles
+                if (game.obstacles[i].x + game.obstacles[i].width < 0) {
+                    game.obstacles.splice(i, 1);
+                    game.score += 10;
+                }
+                
+                // Check collision
+                if (checkCollision(game.player, game.obstacles[i])) {
+                    if (!hasPowerup('shield')) {
+                        game.player.health -= 10;
+                        
+                        if (game.player.health <= 0) {
+                            gameOver();
+                        }
+                    }
+                    
+                    // Remove the obstacle after collision
+                    game.obstacles.splice(i, 1);
+                }
+            }
+            
+            // Update powerups
+            for (let i = game.powerups.length - 1; i >= 0; i--) {
+                game.powerups[i].x -= game.player.speed;
+                
+                // Remove off-screen powerups
+                if (game.powerups[i].x + game.powerups[i].width < 0) {
+                    game.powerups.splice(i, 1);
+                }
+                
+                // Check collection
+                if (checkCollision(game.player, game.powerups[i])) {
+                    collectPowerup(game.powerups[i]);
+                    game.powerups.splice(i, 1);
+                }
+            }
+            
+            // Update active powerups
+            updatePowerups();
+            
+            // Increase distance
+            game.distance += game.player.speed;
+            game.score += 1;
+            
+            // Check stage progression
+            checkStageProgress();
+            
+            // Update UI
+            updateUI();
+        }
+
+        function draw() {
+            const ctx = game.ctx;
+            const stageTheme = config.stageThemes[game.stage];
+            
+            // Draw background
+            ctx.fillStyle = stageTheme.bgColor;
+            ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+            
+            // Draw ground
+            ctx.fillStyle = '#2A2A2A';
+            ctx.fillRect(0, game.groundHeight, game.canvas.width, game.canvas.height - game.groundHeight);
+            
+            // Draw obstacles
+            ctx.fillStyle = '#555';
+            game.obstacles.forEach(obstacle => {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            });
+            
+            // Draw powerups
+            game.powerups.forEach(powerup => {
+                ctx.fillStyle = powerup.color;
+                ctx.beginPath();
+                ctx.arc(
+                    powerup.x + powerup.width / 2,
+                    powerup.y + powerup.height / 2,
+                    powerup.width / 2,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '20px Arial';
+                ctx.fillText(powerup.icon, powerup.x + powerup.width / 2, powerup.y + powerup.height / 2);
+            });
+            
+            // Draw player
+            ctx.fillStyle = hasPowerup('shield') ? '#00B4DB' : '#FF4B2B';
+            ctx.fillRect(game.player.x, game.player.y, game.player.width, game.player.height);
+            
+            // Draw player face/eyes
+            ctx.fillStyle = 'white';
+            ctx.fillRect(game.player.x + 10, game.player.y + 20, 10, 10);
+            ctx.fillRect(game.player.x + 30, game.player.y + 20, 10, 10);
+            
+            // Draw game over screen if needed
+            if (game.isGameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+            }
+        }
+
+        // Start the game when page loads
+        window.onload = init;
+    </script>
+</body>
+</html>
